@@ -1,7 +1,8 @@
 package nl.medvediev.apiserver
 
 import org.scalatest.FunSuite
-import play.api.libs.concurrent.Execution.Implicits._
+import org.scalatest.concurrent.ScalaFutures
+import org.simpleframework.http.Status
 import play.api.libs.ws.ning.NingWSClient
 
 /**
@@ -9,32 +10,121 @@ import play.api.libs.ws.ning.NingWSClient
   */
 class APIServerTest extends FunSuite {
 
-  test("start") {
+  test("get simple") {
     // given
-    val server: APIServer = new APIServer(9090)
+    val apiRoutes: List[APIRoute] = List(
+      GET(
+        path = "/",
+        params = Map(),
+        response = new SimpleAPIResponse(
+          code = Status.OK.getCode,
+          contentType = "application/json",
+          body = """{"test": "ok"}""",
+          headers = Map()
+        )
+      )
+    )
+    val server: APIServer = new APIServer(9090, apiRoutes)
     server.start
-
     val wsClient = NingWSClient()
 
     // when
-    wsClient
+    val result = wsClient
       .url(s"http://localhost:${server.getPort}")
       .get()
-      .map { response =>
-        // then
+
+    // then
+    ScalaFutures.whenReady(result) {
+      response => {
         server.stop()
         assert(response.status === 200)
-        assert(response.header("Content-Type") === "json")
-        assert(response.body === """
-                                   |{"message": "API Server Works"}
-                                 """.stripMargin)
+        assert(response.header("Content-Type").get === "application/json")
+        assert(response.body === """{"test": "ok"}""")
       }
+    }
+  }
+
+  test("get dynamic") {
+    // given
+    val apiRoutes: List[APIRoute] = List(
+      GET(
+        path = "/",
+        params = Map(),
+        response = new DynamicAPIResponse({
+          (request, params) => {
+            println("Dynamic")
+            new SimpleAPIResponse(
+              code = Status.OK.getCode,
+              contentType = "application/json",
+              body = """{"test": "dynamic"}""",
+              headers = Map()
+            )
+          }
+        })
+      )
+    )
+    val server: APIServer = new APIServer(9090, apiRoutes)
+    server.start
+    val wsClient = NingWSClient()
+
+    // when
+    val result = wsClient
+      .url(s"http://localhost:${server.getPort}")
+      .get()
+
+    // then
+    ScalaFutures.whenReady(result) {
+      response => {
+        server.stop()
+        assert(response.status === 200)
+        assert(response.header("Content-Type").get === "application/json")
+        assert(response.body === """{"test": "dynamic"}""")
+      }
+    }
+  }
+
+  test("post dynamic") {
+    // given
+    val apiRoutes: List[APIRoute] = List(
+      POST(
+        path = "/",
+        params = Map(),
+        response = new DynamicAPIResponse({
+          (request, params) => {
+            new SimpleAPIResponse(
+              code = Status.CREATED.getCode,
+              contentType = "application/json",
+              body = """{"test": "dynamic"}""",
+              headers = Map()
+            )
+          }
+        })
+      )
+    )
+    val server: APIServer = new APIServer(9090, apiRoutes)
+    server.start
+    val wsClient = NingWSClient()
+
+    // when
+    val result = wsClient
+      .url(s"http://localhost:${server.getPort}")
+      .post("test")
+
+    // then
+    ScalaFutures.whenReady(result) {
+      response => {
+        server.stop()
+        assert(response.status === 201)
+        assert(response.header("Content-Type").get === "application/json")
+        assert(response.body === """{"test": "dynamic"}""")
+      }
+    }
   }
 
   test("reuse port") {
     // given
-    val server1 = new APIServer(9090)
-    val server2 = new APIServer(9090)
+    val server1 = new APIServer(9090, List())
+    val server2 = new APIServer(9090, List())
 
     // when
     server1.start

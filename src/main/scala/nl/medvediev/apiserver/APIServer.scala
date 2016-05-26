@@ -3,13 +3,33 @@ package nl.medvediev.apiserver
 import java.io.IOException
 import java.net.InetSocketAddress
 
+import org.simpleframework.http.Request
 import org.simpleframework.http.core.ContainerSocketProcessor
 import org.simpleframework.transport.connect.SocketConnection
 
 /**
   * Created by ievgen.medvediev on 26/05/16.
   */
-class APIServer(initPort: Int) {
+
+case class APIRoute(verb: Verb, path: String, params: Map[String, String], response: APIResponse)
+
+sealed trait APIResponse
+
+case class SimpleAPIResponse(code: Int, contentType: String, body: String, headers: Map[String, String]) extends APIResponse
+
+case class DynamicAPIResponse(response: (Request, List[(String, String)]) => SimpleAPIResponse) extends APIResponse
+
+object GET {
+  def apply(path: String, params: Map[String, String], response: APIResponse): APIRoute =
+    APIRoute(GetVerb, path, params, response)
+}
+
+object POST {
+  def apply(path: String, params: Map[String, String], response: APIResponse): APIRoute =
+    APIRoute(PostVerb, path, params, response)
+}
+
+class APIServer(initPort: Int, routes: List[APIRoute]) {
 
   private var socketConnection: SocketConnection = _
   private var port = initPort
@@ -33,7 +53,7 @@ class APIServer(initPort: Int) {
       }
     }
 
-    val container = new APIContainer()
+    val container = new APIContainer(routes)
     val connection = new SocketConnection(new ContainerSocketProcessor(container))
     connect(connection, port)
   }
