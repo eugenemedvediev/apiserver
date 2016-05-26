@@ -1,8 +1,8 @@
 package nl.medvediev.apiserver
 
 import org.scalatest.FunSuite
-import play.api.libs.ws.ning.NingWSClient
 import play.api.libs.concurrent.Execution.Implicits._
+import play.api.libs.ws.ning.NingWSClient
 
 /**
   * Created by ievgen on 26/05/16.
@@ -21,10 +21,32 @@ class APIServerTest extends FunSuite {
       .get()
       .map { response =>
         // then
+        server.stop()
         assert(response.status === 200)
         assert(response.body === "API Server works")
-        println(s"Response body is: '${response.body}'")
-
       }
+  }
+
+  test("reuse port") {
+    // given
+    val server1 = new APIServer(9090)
+    val server2 = new APIServer(9090)
+
+    // when
+    server1.start
+    server2.start
+
+    // then
+    assert(server1.getPort >= 9090)
+    assert(server2.getPort > 9090)
+    assert(server1.getPort != server2.getPort)
+
+    // when
+    server1.stop //port free
+    server2.stop //port + 1 free
+
+    // then
+    assert(server1.getPort === 9090)
+    assert(server2.getPort === 9090)
   }
 }
