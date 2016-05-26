@@ -13,17 +13,21 @@ class APIServerTest extends FunSuite {
     // given
     val server: APIServer = new APIServer(9090)
     server.start
+
     val wsClient = NingWSClient()
 
     // when
     wsClient
-      .url("http://localhost:9090")
+      .url(s"http://localhost:${server.getPort}")
       .get()
       .map { response =>
         // then
         server.stop()
         assert(response.status === 200)
-        assert(response.body === "API Server works")
+        assert(response.header("Content-Type") === "json")
+        assert(response.body === """
+                                   |{"message": "API Server Works"}
+                                 """.stripMargin)
       }
   }
 
